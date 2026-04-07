@@ -52,10 +52,7 @@ class BiddingProcessorMicroservice {
 
                     // s-au primit toate mesajele de la MessageProcessorMicroservice, i se trimite un mesaj pentru a semnala
                     // acest lucru
-                    val finishedBidsMessage = Message.create(
-                        "${messageProcessorConnection.localAddress}:${messageProcessorConnection.localPort}",
-                        "am primit tot"
-                    )
+                    val finishedBidsMessage = Message.create("${messageProcessorConnection.localAddress}:${messageProcessorConnection.localPort}",body="am primit tot")
 
                     messageProcessorConnection.getOutputStream().write(finishedBidsMessage.serialize())
                     messageProcessorConnection.close()
@@ -96,7 +93,7 @@ class BiddingProcessorMicroservice {
             it.body.split(" ")[1].toInt()
         }
 
-        println("Castigatorul este: ${winner?.sender}")
+        println("Castigatorul este: ${winner?.sender} ${winner?.senderInfo?.name}")
 
         try {
             auctioneerSocket = Socket(AUCTIONEER_HOST, AUCTIONEER_PORT)

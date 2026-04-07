@@ -12,6 +12,9 @@ class BidderMicroservice {
     private var auctionResultObservable: Observable<String>
     private var myIdentity: String = "[BIDDER_NECONECTAT]"
 
+    //se genereaza identitatea bidder-ului
+    private val mySenderInfo: SenderInfo = generateRandomSenderInfo()
+
     companion object Constants {
         const val AUCTIONEER_HOST = "localhost"
         const val AUCTIONEER_PORT = 1500
@@ -63,7 +66,7 @@ class BidderMicroservice {
 
         // se creeaza mesajul care incapsuleaza oferta
         val biddingMessage = Message.create("${auctioneerSocket.localAddress}:${auctioneerSocket.localPort}",
-            "licitez $pret")
+            "licitez $pret",mySenderInfo)
 
         // bidder-ul trimite pretul pentru care doreste sa liciteze
         val serializedMessage = biddingMessage.serialize()
@@ -97,6 +100,26 @@ class BidderMicroservice {
         bid()
         waitForResult()
     }
+}
+private fun generateRandomSenderInfo(): SenderInfo {
+    val firstNames = listOf("Alex", "Andrei", "Maria", "Elena", "Mihai", "Ioana", "Stefan", "Ana", "Cristian", "Diana", "Vlad", "Irina")
+    val lastNames = listOf("Popescu", "Ionescu", "Radu", "Dumitrescu", "Stan", "Gheorghe", "Matei", "Badea", "Dima", "Avram")
+    val domains = listOf("gmail.com", "yahoo.com", "student.tuiasi.ro", "test.com")
+
+    // Alegem aleatoriu
+    val firstName = firstNames.random()
+    val lastName = lastNames.random()
+
+    // Construim datele
+    val name = "$firstName $lastName"
+
+    // Adăugăm un număr mic la email pentru a evita complet duplicatele (ex: ion.popescu_42@gmail.com)
+    val email = "${firstName.lowercase()}.${lastName.lowercase()}_${Random.nextInt(10, 99)}@${domains.random()}"
+
+    // Generăm un număr de telefon de 10 cifre care începe cu "07"
+    val phone = "07" + (1..8).map { Random.nextInt(0, 10) }.joinToString("")
+
+    return SenderInfo(name, phone, email)
 }
 
 fun main(args: Array<String>) {

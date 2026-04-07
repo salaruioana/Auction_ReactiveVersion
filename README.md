@@ -26,6 +26,7 @@ The **Laboratory Requirements** have been successfully implemented and tested:
 - [x] Simulation of 100+ concurrent `Bidder` instances.
 - [x] Filtering duplicate bids using reactive operators in the `MessageProcessor`.
 - [x] Sorting messages based on timestamp upon stream completion.
+- [x] Improved the implementation so that each user is identified by a name, phone number and an email address.
 
 **Up Next (Homework Assignment):**
 - [ ] Fault tolerance mechanism (Write-Ahead Logging for current operational state).
