@@ -1,0 +1,23 @@
+# =========================
+# Sistem de Operare
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE-uri si Editor
+# =========================
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# =========================
+# Java / Kotlin / Spring
+# =========================
+target/
+build/
+*.class
+*.jar
+*.war
+.gradle/
