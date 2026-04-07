@@ -27,10 +27,10 @@ The **Laboratory Requirements** have been successfully implemented and tested:
 - [x] Filtering duplicate bids using reactive operators in the `MessageProcessor`.
 - [x] Sorting messages based on timestamp upon stream completion.
 - [x] Improved the implementation so that each user is identified by a name, phone number and an email address.
+- [x] Fault tolerance mechanism (Write-Ahead Logging for current operational state).
+- [x] Heartbeat microservice (Monitoring Docker instances and automatic restart on failure).
 
 **Up Next (Homework Assignment):**
-- [ ] Fault tolerance mechanism (Write-Ahead Logging for current operational state).
-- [ ] Heartbeat microservice (Monitoring Docker instances and automatic restart on failure).
 - [ ] Generalized log collection system (instrumentation and log centralization).
 
 ## How to Run

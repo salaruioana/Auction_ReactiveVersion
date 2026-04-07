@@ -9,6 +9,7 @@ import java.util.*
 import kotlin.system.exitProcess
 import messagelib.Message
 import messagelib.ExecutionJournal
+import java.io.PrintWriter
 
 class MessageProcessorMicroservice {
     private var messageProcessorSocket: ServerSocket
@@ -167,7 +168,28 @@ class MessageProcessorMicroservice {
     }
 }
 
+fun registerToHeartbeat(name: String, jarPath: String) {
+    try {
+        val socket = Socket("localhost", 1800)
+        val writer = PrintWriter(socket.getOutputStream(), true)
+
+        // Aflăm PID-ul în mod compatibil Java 8/11
+        val jvmName = java.lang.management.ManagementFactory.getRuntimeMXBean().name
+        val currentPid = jvmName.split("@")[0]
+
+        // Comanda trebuie să fie calea COMPLETĂ către JAR
+        val command = "java -jar $jarPath"
+
+        writer.println("$name|$command|$currentPid")
+        socket.close()
+    } catch (e: Exception) {
+        println("Heartbeat nu e pornit.")
+    }
+}
+
 fun main(args: Array<String>) {
+    registerToHeartbeat("MessageProcessor", "out/artifacts/MessageProcessorMicroservice_jar/MessageProcessorMicroservice.jar")
+
     val messageProcessorMicroservice = MessageProcessorMicroservice()
     messageProcessorMicroservice.run()
 }

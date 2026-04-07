@@ -119,10 +119,23 @@ class BidderMicroservice {
     }
 }
 private fun generateRandomSenderInfo(): SenderInfo {
-    val firstNames = listOf("Alex", "Andrei", "Maria", "Elena", "Mihai", "Ioana", "Stefan", "Ana", "Cristian", "Diana", "Vlad", "Irina")
-    val lastNames = listOf("Popescu", "Ionescu", "Radu", "Dumitrescu", "Stan", "Gheorghe", "Matei", "Badea", "Dima", "Avram")
-    val domains = listOf("gmail.com", "yahoo.com", "student.tuiasi.ro", "test.com")
+    val firstNames = listOf(
+        "Gregory", "James", "Lisa", "Robert", "Eric", "Allison", "Remy", // House M.D.
+        "Michael", "Jim", "Pam", "Dwight", "Stanley", "Kevin", "Angela", "Creed" // The Office
+    )
 
+    val lastNames = listOf(
+        "House", "Wilson", "Cuddy", "Chase", "Foreman", "Cameron", "Hadley", // House M.D.
+        "Scott", "Halpert", "Beesly", "Schrute", "Hudson", "Malone", "Martin", "Bratton" // The Office
+    )
+
+    val domains = listOf(
+        "princeton-plainsboro.edu",
+        "dundermifflin.com",
+        "scrute-farms.com",
+        "gmail.com",
+        "yahoo.com"
+    )
     // Alegem aleatoriu
     val firstName = firstNames.random()
     val lastName = lastNames.random()
