@@ -6,11 +6,15 @@ import java.net.Socket
 import kotlin.Exception
 import kotlin.random.Random
 import kotlin.system.exitProcess
+import messagelib.Message
+import messagelib.ExecutionJournal
+import messagelib.SenderInfo
 
 class BidderMicroservice {
     private var auctioneerSocket: Socket
     private var auctionResultObservable: Observable<String>
     private var myIdentity: String = "[BIDDER_NECONECTAT]"
+    private var journal = ExecutionJournal("bidder_journal_${System.nanoTime()}_${Random.nextInt(1000)}.txt")
 
     //se genereaza identitatea bidder-ului
     private val mySenderInfo: SenderInfo = generateRandomSenderInfo()
@@ -64,12 +68,16 @@ class BidderMicroservice {
         // se genereaza o oferta aleatorie din partea bidderului curent
         val pret = Random.nextInt(MIN_BID, MAX_BID)
 
+
         // se creeaza mesajul care incapsuleaza oferta
         val biddingMessage = Message.create("${auctioneerSocket.localAddress}:${auctioneerSocket.localPort}",
             "licitez $pret",mySenderInfo)
 
         // bidder-ul trimite pretul pentru care doreste sa liciteze
         val serializedMessage = biddingMessage.serialize()
+
+        journal.logEvent("BID_SENT", String(serializedMessage).trim())
+
         auctioneerSocket.getOutputStream().write(serializedMessage)
 
         // exista o sansa din 2 ca bidder-ul sa-si trimita oferta de 2 ori, eronat
@@ -85,7 +93,10 @@ class BidderMicroservice {
             // cand se primeste un mesaj in flux, inseamna ca a sosit rezultatul licitatiei
             onNext = {
                 val resultMessage: Message = Message.deserialize(it.toByteArray())
+                journal
                 println("$myIdentity Rezultat licitatie: ${resultMessage.body}")
+                journal.clear()
+                journal.logEvent("FINISHED", "Received result")
             },
             onError = {
                 println("$myIdentity Eroare: $it")
@@ -97,8 +108,14 @@ class BidderMicroservice {
     }
 
     fun run() {
-        bid()
-        waitForResult()
+        val lastState = journal.getLastEvent()
+        if (lastState != null && lastState.first == "BID_SENT") {
+            println("$myIdentity [RECOVERY] oferta trimisa anterior (${lastState.second}).")
+            waitForResult()
+        } else {
+            bid()
+            waitForResult()
+        }
     }
 }
 private fun generateRandomSenderInfo(): SenderInfo {

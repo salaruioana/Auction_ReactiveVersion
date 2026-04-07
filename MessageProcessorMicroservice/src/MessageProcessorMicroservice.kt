@@ -7,6 +7,8 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.*
 import kotlin.system.exitProcess
+import messagelib.Message
+import messagelib.ExecutionJournal
 
 class MessageProcessorMicroservice {
     private var messageProcessorSocket: ServerSocket
@@ -15,6 +17,7 @@ class MessageProcessorMicroservice {
     private var receiveInQueueObservable: Observable<String>
     private val subscriptions = CompositeDisposable()
     private val messageQueue: Queue<Message> = LinkedList<Message>()
+    private val journal = ExecutionJournal("messageProcessor_journal.txt")
 
     companion object Constants {
         const val MESSAGE_PROCESSOR_PORT = 1600
@@ -79,6 +82,12 @@ class MessageProcessorMicroservice {
                     val sortedList = messageQueue.sortedBy{ it.timestamp}
                     messageQueue.clear()
                     messageQueue.addAll(sortedList)
+
+                    println("Mesaje procesate și sortate. Salvez în jurnal...")
+
+                    val processedData = messageQueue.joinToString(";") { String(it.serialize()).trim() }
+                    journal.logEvent("SENDING_TO_BIDDING_PROCESSOR", processedData)
+
                     // s-au primit toate mesajele de la AuctioneerMicroservice, i se trimite un mesaj pentru a semnala
                     // acest lucru
                     val finishedMessagesMessage = Message.create(
@@ -99,36 +108,62 @@ class MessageProcessorMicroservice {
     private fun sendProcessedMessages() {
         try {
             biddingProcessorSocket = Socket(BIDDING_PROCESSOR_HOST, BIDDING_PROCESSOR_PORT)
+            val outputStream = biddingProcessorSocket.getOutputStream()
 
-            println("Trimit urmatoarele mesaje:")
+            println("Trimit urmatoarele mesaje...")
+
             Observable.fromIterable(messageQueue).subscribeBy(
                 onNext = {
-                    println(it.toString())
-
-                    // trimitere mesaje catre procesorul licitatiei, care decide rezultatul final
-                    biddingProcessorSocket.getOutputStream().write(it.serialize())
+                    outputStream.write(it.serialize())
+                    outputStream.flush() // Forțăm trimiterea imediată
+                    println("Trimis: $it")
                 },
                 onComplete = {
                     val noMoreMessages = Message.create(
                         "${biddingProcessorSocket.localAddress}:${biddingProcessorSocket.localPort}",
                         "final"
                     )
-                    biddingProcessorSocket.getOutputStream().write(noMoreMessages.serialize())
-                    biddingProcessorSocket.close()
+                    outputStream.write(noMoreMessages.serialize())
+                    outputStream.flush()
 
-                    // se elibereaza memoria din multimea de Subscriptions
+                    println("Toate mesajele au fost trimise la BiddingProcessor.")
+
+                    // Jurnalizarea succesului
+                    journal.clear()
+                    journal.logEvent("FINISHED", "Success")
+
+                    // ÎNCHIDEM socket-ul abia aici!
+                    biddingProcessorSocket.close()
                     subscriptions.dispose()
+                },
+                onError = {
+                    println("Eroare la trimitere: $it")
+                    biddingProcessorSocket.close()
                 }
             )
         } catch (e: Exception) {
-            println("Nu ma pot conecta la BiddingProcessor!")
-            messageProcessorSocket.close()
-            exitProcess(1)
+            println("Nu ma pot conecta la BiddingProcessor: ${e.message}")
         }
     }
 
     fun run() {
-        receiveAndProcessMessages()
+        val lastState = journal.getLastEvent()
+
+        if (lastState != null && lastState.first == "SENDING_TO_BIDDING_PROCESSOR") {
+            println("[RECOVERY] Crash detectat.")
+
+            val savedMessages = lastState.second.split(";")
+            savedMessages.forEach {
+                if (it.isNotBlank()) {
+                    messageQueue.add(Message.deserialize(it.toByteArray()))
+                }
+            }
+
+            println("[RECOVERY] Am recuperat ${messageQueue.size} mesaje. Trimit la BiddingProcessor")
+            sendProcessedMessages()
+        } else {
+            receiveAndProcessMessages()
+        }
     }
 }
 

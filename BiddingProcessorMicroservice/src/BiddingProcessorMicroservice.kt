@@ -7,6 +7,8 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.*
 import kotlin.system.exitProcess
+import messagelib.Message
+import messagelib.ExecutionJournal
 
 class BiddingProcessorMicroservice {
     private var biddingProcessorSocket: ServerSocket
@@ -14,6 +16,7 @@ class BiddingProcessorMicroservice {
     private var receiveProcessedBidsObservable: Observable<String>
     private val subscriptions = CompositeDisposable()
     private val processedBidsQueue: Queue<Message> = LinkedList<Message>()
+    private val journal = ExecutionJournal("biddingProcessor_journal.txt")
 
     companion object Constants {
         const val BIDDING_PROCESSOR_PORT = 1700
@@ -76,6 +79,9 @@ class BiddingProcessorMicroservice {
                     processedBidsQueue.add(message)
                 },
                 onComplete = {
+
+                    val bidsData = processedBidsQueue.joinToString(";") { String(it.serialize()).trim() }
+                    journal.logEvent("DECIDING_WINNER", bidsData)
                     // s-a incheiat primirea tuturor mesajelor
                     // se decide castigatorul licitatiei
                     decideAuctionWinner()
@@ -102,6 +108,9 @@ class BiddingProcessorMicroservice {
             auctioneerSocket.getOutputStream().write(winner!!.serialize())
             auctioneerSocket.close()
 
+            journal.clear()
+            journal.logEvent("FINISHED", "Winner announced")
+
             println("Am anuntat castigatorul catre AuctioneerMicroservice.")
         } catch (e: Exception) {
             println("Nu ma pot conecta la Auctioneer!")
@@ -111,9 +120,22 @@ class BiddingProcessorMicroservice {
     }
 
     fun run() {
-        receiveProcessedBids()
+        val lastState = journal.getLastEvent()
 
-        // se elibereaza memoria din multimea de Subscriptions
+        if (lastState != null && lastState.first == "DECIDING_WINNER") {
+            println("[RECOVERY] crash detectat")
+
+            val savedBids = lastState.second.split(";")
+            savedBids.forEach {
+                if (it.isNotBlank()) {
+                    processedBidsQueue.add(Message.deserialize(it.toByteArray()))
+                } }
+
+            println("[RECOVERY] Am recuperat ${processedBidsQueue.size} oferte. Recalculez castigatorul...")
+            decideAuctionWinner()
+        } else {
+            receiveProcessedBids()
+        }
         subscriptions.dispose()
     }
 }

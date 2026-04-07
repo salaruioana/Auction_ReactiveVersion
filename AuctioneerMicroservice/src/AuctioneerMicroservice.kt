@@ -10,6 +10,9 @@ import java.net.SocketTimeoutException
 import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.system.exitProcess
+import messagelib.Message
+import messagelib.ExecutionJournal
+
 
 class AuctioneerMicroservice {
     private var auctioneerSocket: ServerSocket
@@ -18,6 +21,7 @@ class AuctioneerMicroservice {
     private val subscriptions = CompositeDisposable()
     private val bidQueue: Queue<Message> = LinkedList<Message>()
     private val bidderConnections: MutableList<Socket> = mutableListOf()
+    private val journal = ExecutionJournal("auctioneer_journal.txt")
 
     companion object Constants {
         const val MESSAGE_PROCESSOR_HOST = "localhost"
@@ -77,6 +81,11 @@ class AuctioneerMicroservice {
                 // licitatia s-a incheiat
                 // se trimit raspunsurile mai departe catre procesorul de mesaje
                 println("Licitatia s-a incheiat! Se trimit ofertele spre procesare...")
+
+                val bidsData = bidQueue.joinToString(";") { String(it.serialize()).trim() }
+
+                journal.logEvent("PENDING", bidsData)
+
                 forwardBids()
             },
             onError = { println("Eroare: $it") }
@@ -106,6 +115,9 @@ class AuctioneerMicroservice {
                     // cum ca a primit toate mesajele
                     val bufferReader = BufferedReader(InputStreamReader(messageProcessorSocket.inputStream))
                     bufferReader.readLine()
+
+                    journal.clear() // Curatam jurnalul pentru ca am terminat cu succes
+                    println("[JOURNAL] Finalizat")
 
                     messageProcessorSocket.close()
 
@@ -158,7 +170,27 @@ class AuctioneerMicroservice {
     }
 
     fun run() {
-        receiveBids()
+
+        val lastState = journal.getLastEvent()
+
+        if (lastState != null && lastState.first == "PENDING") {
+            println("[RECOVERY] Crash detectat")
+
+            // Luam string-ul lung, il spargem dupa ";" si deserializam fiecare mesaj inapoi in bidQueue
+            val savedBids = lastState.second.split(";")
+            savedBids.forEach {
+                if (it.isNotBlank()) {
+                    val recoveredMsg = Message.deserialize(it.toByteArray())
+                    bidQueue.add(recoveredMsg)
+                }
+            }
+
+            println("[RECOVERY] Am recuperat ${bidQueue.size} oferte. Trec direct la trimitere.")
+            forwardBids() // Trimitem direct, fara sa mai asteptam 15 secunde
+        } else {
+            // Daca nu avem nimic de recuperat, pornim normal
+            receiveBids()
+        }
     }
 }
 

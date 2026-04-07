@@ -1,3 +1,7 @@
+package messagelib
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -52,7 +56,9 @@ class Message private constructor(val sender: String, val body: String, val time
         }
     }
 }
-/*
+
+
+
 fun main(args: Array<String>) {
     val info = SenderInfo("Ioana bomboana", "0777676767", "ioana@ac.com")
     val msg = Message.create("localhost:4848", "test mesaj", info)
@@ -60,4 +66,40 @@ fun main(args: Array<String>) {
     val serialized = msg.serialize()
     val deserialized = Message.deserialize(serialized)
     println(deserialized)
-}*/
+}
+class ExecutionJournal( val filename: String) {
+    private val journalFile = File(filename)
+
+    init {
+        if (!journalFile.exists()) {
+            journalFile.createNewFile()
+        }
+    }
+
+    fun logEvent(state: String, data: String) {
+        val entry = "$state | $data\n"
+        Files.write(
+            journalFile.toPath(),
+            entry.toByteArray(),
+            StandardOpenOption.APPEND
+        )
+        println("[JOURNAL] Am salvat starea: $state")
+    }
+    fun logMessage(state: String, message: Message) {
+        val serializedData = String(message.serialize())
+        logEvent(state, serializedData)
+    }
+
+    fun getLastEvent(): Pair<String, String>? {
+        val lines = journalFile.readLines()
+        if (lines.isEmpty()) return null
+
+        val lastLine = lines.last()
+        val parts = lastLine.split(" | ", limit = 2)
+        return if (parts.size == 2) parts[0] to parts[1] else null
+    }
+
+    fun clear() {
+        journalFile.writeText("")
+    }
+}
