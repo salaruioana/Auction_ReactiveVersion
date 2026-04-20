@@ -7,6 +7,7 @@ import kotlin.Exception
 import kotlin.random.Random
 import kotlin.system.exitProcess
 import messagelib.Message
+import messagelib.IExecutionMonitor
 import messagelib.ExecutionJournal
 import messagelib.SenderInfo
 
@@ -14,7 +15,8 @@ class BidderMicroservice {
     private var auctioneerSocket: Socket
     private var auctionResultObservable: Observable<String>
     private var myIdentity: String = "[BIDDER_NECONECTAT]"
-    private var journal = ExecutionJournal("bidder_journal_${System.nanoTime()}_${Random.nextInt(1000)}.txt")
+
+    private val journal: IExecutionMonitor = ExecutionJournal("bidder_journal_${System.nanoTime()}_${Random.nextInt(1000)}")
 
     //se genereaza identitatea bidder-ului
     private val mySenderInfo: SenderInfo = generateRandomSenderInfo()
@@ -30,6 +32,9 @@ class BidderMicroservice {
         try {
             auctioneerSocket = Socket(AUCTIONEER_HOST, AUCTIONEER_PORT)
             println("M-am conectat la Auctioneer!")
+
+            // MODIFICARE: Jurnalizam informativ un eveniment simplu
+            journal.logInfo("M-am conectat la Auctioneer pe portul ${auctioneerSocket.localPort}")
 
             myIdentity = "[${auctioneerSocket.localPort}]"
 
@@ -60,6 +65,8 @@ class BidderMicroservice {
             }
         } catch (e: Exception) {
             println("$myIdentity Nu ma pot conecta la Auctioneer!")
+            // MODIFICARE: Jurnalizam erorile critice
+            journal.logInfo("Eroare critica: Nu m-am putut conecta la Auctioneer!")
             exitProcess(1)
         }
     }
@@ -68,15 +75,16 @@ class BidderMicroservice {
         // se genereaza o oferta aleatorie din partea bidderului curent
         val pret = Random.nextInt(MIN_BID, MAX_BID)
 
-
         // se creeaza mesajul care incapsuleaza oferta
         val biddingMessage = Message.create("${auctioneerSocket.localAddress}:${auctioneerSocket.localPort}",
-            "licitez $pret",mySenderInfo)
+            "licitez $pret", mySenderInfo)
 
         // bidder-ul trimite pretul pentru care doreste sa liciteze
         val serializedMessage = biddingMessage.serialize()
 
-        journal.logEvent("BID_SENT", String(serializedMessage).trim())
+        // MODIFICARE: Logam pasul curent inainte de a executa operatiunea care poate sa crape
+        // Salvam state-ul "BID_SENT" impreuna cu datele in caz ca avem nevoie de recovery
+        journal.logStep("BID_SENT", String(serializedMessage).trim())
 
         auctioneerSocket.getOutputStream().write(serializedMessage)
 
@@ -93,13 +101,16 @@ class BidderMicroservice {
             // cand se primeste un mesaj in flux, inseamna ca a sosit rezultatul licitatiei
             onNext = {
                 val resultMessage: Message = Message.deserialize(it.toByteArray())
-                journal
                 println("$myIdentity Rezultat licitatie: ${resultMessage.body}")
-                journal.clear()
-                journal.logEvent("FINISHED", "Received result")
+
+                // MODIFICARE: Deoarece am primit rezultatul, fluxul a ajuns la final
+                // Marcam ultimul pas deschis (BID_SENT) ca fiind finalizat, deci la repornire va fi curat
+                journal.markAsFinished()
+                journal.logInfo("Licitatie incheiata.")
             },
             onError = {
                 println("$myIdentity Eroare: $it")
+                journal.logInfo("Eroare in timpul asteptarii: $it")
             }
         )
 
@@ -108,45 +119,30 @@ class BidderMicroservice {
     }
 
     fun run() {
-        val lastState = journal.getLastEvent()
-        if (lastState != null && lastState.first == "BID_SENT") {
-            println("$myIdentity [RECOVERY] oferta trimisa anterior (${lastState.second}).")
+        // MODIFICARE: Verificam daca exista un pas incomplet in loc de "getLastEvent"
+        val incompleteStep = journal.getLastIncompleteStep()
+
+        if (incompleteStep != null && incompleteStep.first == "BID_SENT") {
+            println("$myIdentity [RECOVERY] Se reia asteptarea. Oferta trimisa anterior: ${incompleteStep.second}.")
+            // Stiam ca am trimis deja oferta inainte sa crape sistemul, asa ca sarim peste bid()
             waitForResult()
         } else {
+            // Nu exista pasi incompleti, o luam de la zero normal
             bid()
             waitForResult()
         }
     }
 }
+
 private fun generateRandomSenderInfo(): SenderInfo {
-    val firstNames = listOf(
-        "Gregory", "James", "Lisa", "Robert", "Eric", "Allison", "Remy", // House M.D.
-        "Michael", "Jim", "Pam", "Dwight", "Stanley", "Kevin", "Angela", "Creed" // The Office
-    )
-
-    val lastNames = listOf(
-        "House", "Wilson", "Cuddy", "Chase", "Foreman", "Cameron", "Hadley", // House M.D.
-        "Scott", "Halpert", "Beesly", "Schrute", "Hudson", "Malone", "Martin", "Bratton" // The Office
-    )
-
-    val domains = listOf(
-        "princeton-plainsboro.edu",
-        "dundermifflin.com",
-        "scrute-farms.com",
-        "gmail.com",
-        "yahoo.com"
-    )
-    // Alegem aleatoriu
+    // ... [Aici ramane exact implementarea ta, am ascuns-o ca sa economisim spatiu] ...
+    val firstNames = listOf("Gregory", "James", "Lisa", "Robert", "Eric", "Allison", "Remy", "Michael", "Jim", "Pam", "Dwight", "Stanley", "Kevin", "Angela", "Creed")
+    val lastNames = listOf("House", "Wilson", "Cuddy", "Chase", "Foreman", "Cameron", "Hadley", "Scott", "Halpert", "Beesly", "Schrute", "Hudson", "Malone", "Martin", "Bratton")
+    val domains = listOf("princeton-plainsboro.edu", "dundermifflin.com", "scrute-farms.com", "gmail.com", "yahoo.com")
     val firstName = firstNames.random()
     val lastName = lastNames.random()
-
-    // Construim datele
     val name = "$firstName $lastName"
-
-    // Adăugăm un număr mic la email pentru a evita complet duplicatele (ex: ion.popescu_42@gmail.com)
     val email = "${firstName.lowercase()}.${lastName.lowercase()}_${Random.nextInt(10, 99)}@${domains.random()}"
-
-    // Generăm un număr de telefon de 10 cifre care începe cu "07"
     val phone = "07" + (1..8).map { Random.nextInt(0, 10) }.joinToString("")
 
     return SenderInfo(name, phone, email)

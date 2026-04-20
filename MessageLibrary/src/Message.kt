@@ -67,39 +67,3 @@ fun main(args: Array<String>) {
     val deserialized = Message.deserialize(serialized)
     println(deserialized)
 }
-class ExecutionJournal( val filename: String) {
-    private val journalFile = File(filename)
-
-    init {
-        if (!journalFile.exists()) {
-            journalFile.createNewFile()
-        }
-    }
-
-    fun logEvent(state: String, data: String) {
-        val entry = "$state | $data\n"
-        Files.write(
-            journalFile.toPath(),
-            entry.toByteArray(),
-            StandardOpenOption.APPEND
-        )
-        println("[JOURNAL] Am salvat starea: $state")
-    }
-    fun logMessage(state: String, message: Message) {
-        val serializedData = String(message.serialize())
-        logEvent(state, serializedData)
-    }
-
-    fun getLastEvent(): Pair<String, String>? {
-        val lines = journalFile.readLines()
-        if (lines.isEmpty()) return null
-
-        val lastLine = lines.last()
-        val parts = lastLine.split(" | ", limit = 2)
-        return if (parts.size == 2) parts[0] to parts[1] else null
-    }
-
-    fun clear() {
-        journalFile.writeText("")
-    }
-}

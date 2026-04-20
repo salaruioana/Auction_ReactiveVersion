@@ -3,6 +3,7 @@ HeartbeatMicroservice: Va fi un server TCP care ascultă pe portul 1800.
 Înregistrare: Fiecare microserviciu (Auctioneer, MessageProcessor, BiddingProcessor), imediat ce pornește, se conectează la Heartbeat și îi spune: "Sunt [NUME] și mă poți reporni cu [COMANDA]".
 Monitorizare: Heartbeat-ul va folosi ProcessHandle (disponibil în Java 9+) pentru a verifica dacă PID-ul procesului respectiv mai este activ.
 Restart: Dacă PID-ul dispare, Heartbeat execută comanda primită.*/
+
 import java.io.*
 import java.net.*
 import java.util.concurrent.*

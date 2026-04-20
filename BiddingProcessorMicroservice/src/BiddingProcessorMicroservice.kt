@@ -8,6 +8,7 @@ import java.net.Socket
 import java.util.*
 import kotlin.system.exitProcess
 import messagelib.Message
+import messagelib.IExecutionMonitor
 import messagelib.ExecutionJournal
 import java.io.PrintWriter
 
@@ -17,7 +18,9 @@ class BiddingProcessorMicroservice {
     private var receiveProcessedBidsObservable: Observable<String>
     private val subscriptions = CompositeDisposable()
     private val processedBidsQueue: Queue<Message> = LinkedList<Message>()
-    private val journal = ExecutionJournal("biddingProcessor_journal.txt")
+
+    // MODIFICARE: Folosim interfata abstracta. Am scos .txt din nume, jurnalul il adauga intern
+    private val journal: IExecutionMonitor = ExecutionJournal("biddingProcessor")
 
     companion object Constants {
         const val BIDDING_PROCESSOR_PORT = 1700
@@ -29,6 +32,9 @@ class BiddingProcessorMicroservice {
         biddingProcessorSocket = ServerSocket(BIDDING_PROCESSOR_PORT)
         println("BiddingProcessorMicroservice se executa pe portul: ${biddingProcessorSocket.localPort}")
         println("Se asteapta ofertele pentru finalizarea licitatiei...")
+
+        // MODIFICARE: Adaugam logInfo pentru pornirea serviciului
+        journal.logInfo("BiddingProcessor a pornit pe portul ${biddingProcessorSocket.localPort}. Asteapta mesaje...")
 
         // se asteapta mesaje primite de la MessageProcessorMicroservice
         val messageProcessorConnection = biddingProcessorSocket.accept()
@@ -82,7 +88,10 @@ class BiddingProcessorMicroservice {
                 onComplete = {
 
                     val bidsData = processedBidsQueue.joinToString(";") { String(it.serialize()).trim() }
-                    journal.logEvent("DECIDING_WINNER", bidsData)
+
+                    // MODIFICARE: Salvam starea (pasul) inainte sa facem calcule si sa trimitem la Auctioneer ---
+                    journal.logStep("DECIDING_WINNER", bidsData)
+
                     // s-a incheiat primirea tuturor mesajelor
                     // se decide castigatorul licitatiei
                     decideAuctionWinner()
@@ -109,28 +118,35 @@ class BiddingProcessorMicroservice {
             auctioneerSocket.getOutputStream().write(winner!!.serialize())
             auctioneerSocket.close()
 
-            journal.clear()
-            journal.logEvent("FINISHED", "Winner announced")
+            // MODIFICARE: Am trimis rezultatul cu succes, deci marcam pasul ca fiind finalizat fara sa stergem din fisier
+            journal.markAsFinished()
+            journal.logInfo("Castigatorul (${winner?.senderInfo?.name}) a fost anuntat catre Auctioneer.")
 
             println("Am anuntat castigatorul catre AuctioneerMicroservice.")
         } catch (e: Exception) {
             println("Nu ma pot conecta la Auctioneer!")
+            // MODIFICARE: Logam erorile de conexiune in jurnal
+            journal.logInfo("Eroare critica: Nu ma pot conecta la Auctioneer! Conexiune esuata.")
+
             biddingProcessorSocket.close()
             exitProcess(1)
         }
     }
 
     fun run() {
-        val lastState = journal.getLastEvent()
+        // MODIFICARE: Utilizam noua interfata pentru a obtine pasii incompleti
+        val incompleteStep = journal.getLastIncompleteStep()
 
-        if (lastState != null && lastState.first == "DECIDING_WINNER") {
+        if (incompleteStep != null && incompleteStep.first == "DECIDING_WINNER") {
             println("[RECOVERY] crash detectat")
+            journal.logInfo("Recovery declansat pentru starea DECIDING_WINNER")
 
-            val savedBids = lastState.second.split(";")
+            val savedBids = incompleteStep.second.split(";")
             savedBids.forEach {
                 if (it.isNotBlank()) {
                     processedBidsQueue.add(Message.deserialize(it.toByteArray()))
-                } }
+                }
+            }
 
             println("[RECOVERY] Am recuperat ${processedBidsQueue.size} oferte. Recalculez castigatorul...")
             decideAuctionWinner()
@@ -140,6 +156,7 @@ class BiddingProcessorMicroservice {
         subscriptions.dispose()
     }
 }
+
 fun registerToHeartbeat(name: String, jarPath: String) {
     try {
         val socket = Socket("localhost", 1800)

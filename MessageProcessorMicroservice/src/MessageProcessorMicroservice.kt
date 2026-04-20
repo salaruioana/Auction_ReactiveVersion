@@ -8,6 +8,7 @@ import java.net.Socket
 import java.util.*
 import kotlin.system.exitProcess
 import messagelib.Message
+import messagelib.IExecutionMonitor
 import messagelib.ExecutionJournal
 import java.io.PrintWriter
 
@@ -18,7 +19,9 @@ class MessageProcessorMicroservice {
     private var receiveInQueueObservable: Observable<String>
     private val subscriptions = CompositeDisposable()
     private val messageQueue: Queue<Message> = LinkedList<Message>()
-    private val journal = ExecutionJournal("messageProcessor_journal.txt")
+
+    // MODIFICARE: Folosim interfata. Am eliminat extensia .txt, e adaugata intern
+    private val journal: IExecutionMonitor = ExecutionJournal("messageProcessor")
 
     companion object Constants {
         const val MESSAGE_PROCESSOR_PORT = 1600
@@ -30,6 +33,9 @@ class MessageProcessorMicroservice {
         messageProcessorSocket = ServerSocket(MESSAGE_PROCESSOR_PORT)
         println("MessageProcessorMicroservice se executa pe portul: ${messageProcessorSocket.localPort}")
         println("Se asteapta mesaje pentru procesare...")
+
+        // MODIFICARE: Logam pornirea microserviciului
+        journal.logInfo("MessageProcessor a pornit. Astept conectarea Auctioneer-ului...")
 
         // se asteapta mesaje primite de la AuctioneerMicroservice
         auctioneerConnection = messageProcessorSocket.accept()
@@ -69,7 +75,7 @@ class MessageProcessorMicroservice {
         ///TODO --- filtrati duplicatele folosind operatorul de filtrare
         val receiveInQueueSubscription = receiveInQueueObservable
             .distinct{ unparsedMessage ->
-            Message.deserialize(unparsedMessage.toString().toByteArray()).sender
+                Message.deserialize(unparsedMessage.toString().toByteArray()).sender
             }
             .subscribeBy(
                 onNext = {
@@ -87,7 +93,9 @@ class MessageProcessorMicroservice {
                     println("Mesaje procesate și sortate. Salvez în jurnal...")
 
                     val processedData = messageQueue.joinToString(";") { String(it.serialize()).trim() }
-                    journal.logEvent("SENDING_TO_BIDDING_PROCESSOR", processedData)
+
+                    // MODIFICARE: Marcam pasul critic inainte de a deschide un nou socket spre BiddingProcessor
+                    journal.logStep("SENDING_TO_BIDDING_PROCESSOR", processedData)
 
                     // s-au primit toate mesajele de la AuctioneerMicroservice, i se trimite un mesaj pentru a semnala
                     // acest lucru
@@ -129,9 +137,9 @@ class MessageProcessorMicroservice {
 
                     println("Toate mesajele au fost trimise la BiddingProcessor.")
 
-                    // Jurnalizarea succesului
-                    journal.clear()
-                    journal.logEvent("FINISHED", "Success")
+                    // MODIFICARE: Am trimis cu succes datele! Marcam starea ca finalizata.
+                    journal.markAsFinished()
+                    journal.logInfo("Mesajele procesate au fost trimise cu succes la BiddingProcessor.")
 
                     // ÎNCHIDEM socket-ul abia aici!
                     biddingProcessorSocket.close()
@@ -139,21 +147,26 @@ class MessageProcessorMicroservice {
                 },
                 onError = {
                     println("Eroare la trimitere: $it")
+                    // MODIFICARE: Jurnalizam eroarea inainte de a inchide conexiunea
+                    journal.logInfo("Eroare la transmiterea datelor catre BiddingProcessor: $it")
                     biddingProcessorSocket.close()
                 }
             )
         } catch (e: Exception) {
             println("Nu ma pot conecta la BiddingProcessor: ${e.message}")
+            journal.logInfo("Eroare critica: BiddingProcessor indisponibil.")
         }
     }
 
     fun run() {
-        val lastState = journal.getLastEvent()
+        // MODIFICARE: Prelucram reluarea folosind mecanismul nou getLastIncompleteStep
+        val incompleteStep = journal.getLastIncompleteStep()
 
-        if (lastState != null && lastState.first == "SENDING_TO_BIDDING_PROCESSOR") {
+        if (incompleteStep != null && incompleteStep.first == "SENDING_TO_BIDDING_PROCESSOR") {
             println("[RECOVERY] Crash detectat.")
+            journal.logInfo("Recovery declansat pentru starea SENDING_TO_BIDDING_PROCESSOR")
 
-            val savedMessages = lastState.second.split(";")
+            val savedMessages = incompleteStep.second.split(";")
             savedMessages.forEach {
                 if (it.isNotBlank()) {
                     messageQueue.add(Message.deserialize(it.toByteArray()))
