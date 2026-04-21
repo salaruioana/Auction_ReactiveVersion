@@ -10,6 +10,7 @@ import kotlin.system.exitProcess
 import messagelib.Message
 import messagelib.IExecutionMonitor
 import messagelib.ExecutionJournal
+import messagelib.ReactiveNetworkJournal
 import java.io.PrintWriter
 
 class BiddingProcessorMicroservice {
@@ -20,8 +21,11 @@ class BiddingProcessorMicroservice {
     private val processedBidsQueue: Queue<Message> = LinkedList<Message>()
 
     // MODIFICARE: Folosim interfata abstracta. Am scos .txt din nume, jurnalul il adauga intern
-    private val journal: IExecutionMonitor = ExecutionJournal("biddingProcessor")
-
+    //private val journal: IExecutionMonitor = ExecutionJournal("biddingProcessor")
+    private val journal: IExecutionMonitor = ReactiveNetworkJournal(
+        "BiddingProcessorMicroservice",
+        ExecutionJournal("biddingProcessor_journal")
+    )
     companion object Constants {
         const val BIDDING_PROCESSOR_PORT = 1700
         const val AUCTIONEER_PORT = 1500

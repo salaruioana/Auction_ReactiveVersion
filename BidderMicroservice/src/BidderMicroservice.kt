@@ -1,23 +1,23 @@
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.kotlin.subscribeBy
+import messagelib.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.Socket
 import kotlin.Exception
 import kotlin.random.Random
 import kotlin.system.exitProcess
-import messagelib.Message
-import messagelib.IExecutionMonitor
-import messagelib.ExecutionJournal
-import messagelib.SenderInfo
 
-class BidderMicroservice {
+class BidderMicroservice(private val id: String) {
     private var auctioneerSocket: Socket
     private var auctionResultObservable: Observable<String>
-    private var myIdentity: String = "[BIDDER_NECONECTAT]"
+    private var myIdentity: String = "[BIDDER_$id]"
 
-    private val journal: IExecutionMonitor = ExecutionJournal("bidder_journal_${System.nanoTime()}_${Random.nextInt(1000)}")
-
+    //private val journal: IExecutionMonitor = ExecutionJournal("bidder_journal_${System.nanoTime()}_${Random.nextInt(1000)}")
+    private val journal: IExecutionMonitor = ReactiveNetworkJournal(
+        "Bidder_$id",
+        ExecutionJournal("\"bidder_journal_$id")
+    )
     //se genereaza identitatea bidder-ului
     private val mySenderInfo: SenderInfo = generateRandomSenderInfo()
 
@@ -149,6 +149,7 @@ private fun generateRandomSenderInfo(): SenderInfo {
 }
 
 fun main(args: Array<String>) {
-    val bidderMicroservice = BidderMicroservice()
+    val bidderId = if (args.isNotEmpty()) args[0] else "0"
+    val bidderMicroservice = BidderMicroservice(bidderId)
     bidderMicroservice.run()
 }

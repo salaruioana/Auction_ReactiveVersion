@@ -13,6 +13,7 @@ import kotlin.system.exitProcess
 import messagelib.Message
 import messagelib.IExecutionMonitor
 import messagelib.ExecutionJournal
+import messagelib.ReactiveNetworkJournal
 import java.io.PrintWriter
 
 class AuctioneerMicroservice {
@@ -24,7 +25,11 @@ class AuctioneerMicroservice {
     private val bidderConnections: MutableList<Socket> = mutableListOf()
 
     // MODIFICARE: Folosim interfata abstracta. Am sters .txt deoarece Jurnalul o adauga automat
-    private val journal: IExecutionMonitor = ExecutionJournal("auctioneer")
+    //private val journal: IExecutionMonitor = ExecutionJournal("auctioneer")
+    private val journal: IExecutionMonitor = ReactiveNetworkJournal(
+        "Auctioneer",
+        ExecutionJournal("auctioneer_journal")
+    )
 
     companion object Constants {
         const val MESSAGE_PROCESSOR_HOST = "localhost"

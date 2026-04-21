@@ -10,6 +10,7 @@ import kotlin.system.exitProcess
 import messagelib.Message
 import messagelib.IExecutionMonitor
 import messagelib.ExecutionJournal
+import messagelib.ReactiveNetworkJournal
 import java.io.PrintWriter
 
 class MessageProcessorMicroservice {
@@ -21,8 +22,11 @@ class MessageProcessorMicroservice {
     private val messageQueue: Queue<Message> = LinkedList<Message>()
 
     // MODIFICARE: Folosim interfata. Am eliminat extensia .txt, e adaugata intern
-    private val journal: IExecutionMonitor = ExecutionJournal("messageProcessor")
-
+    //private val journal: IExecutionMonitor = ExecutionJournal("messageProcessor")
+    private val journal: IExecutionMonitor = ReactiveNetworkJournal(
+        "MessageProcessor",
+        ExecutionJournal("messageProcessor_journal")
+    )
     companion object Constants {
         const val MESSAGE_PROCESSOR_PORT = 1600
         const val BIDDING_PROCESSOR_HOST = "localhost"
