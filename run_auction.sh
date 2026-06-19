@@ -3,6 +3,14 @@
 echo " Pornim sistemul de licitație Okazii cu Jurnalizare Reactivă..."
 
 # 0. Curățăm jurnalele vechi (locale și cel general)
+echo " Curățăm procesele Java agățate din rulările anterioare..."
+pkill -f "MasterLoggerMicroservice"
+pkill -f "HeartbeatMicroservice"
+pkill -f "MessageProcessorMicroservice"
+pkill -f "BiddingProcessorMicroservice"
+pkill -f "AuctioneerMicroservice"
+pkill -f "BidderMicroservice"
+sleep 1 # Îi dăm sistemului o secundă să elibereze porturile complet
 rm -f *_journal*.txt
 rm -f master_general_journal.log
 
